@@ -6,7 +6,7 @@ import os
 app = Flask(__name__)
 
 # 載入模型 (你可以換成自己訓練好的模型，例如 'best.pt')
-MODEL_PATH = os.getenv("MODEL_PATH", "C:\Users\Tonywu\Desktop\yolo_project\freshness_fruit_and_vegetables.pt")
+MODEL_PATH = os.getenv("MODEL_PATH", os.path.join(os.path.dirname(__file__), "freshness_fruit_and_vegetables.pt"))
 model = YOLO(MODEL_PATH)
 
 @app.route("/")
@@ -40,4 +40,5 @@ def predict():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=10000)
+
 
