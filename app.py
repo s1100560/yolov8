@@ -38,7 +38,6 @@ def predict():
 
     return jsonify({"detections": detections})
 
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=10000)
+# 移除 if __name__ == "__main__" 的部分，讓 gunicorn 處理啟動
 
 
