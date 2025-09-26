@@ -29,17 +29,17 @@ try:
     MODEL_PATH = os.getenv("MODEL_PATH", os.path.join(os.path.dirname(__file__), "freshness_fruit_and_vegetables.pt"))
     print(f"載入模型從: {MODEL_PATH}")
     
-    # 檢查模型檔案是否存在
     if not os.path.exists(MODEL_PATH):
         raise FileNotFoundError(f"模型檔案不存在: {MODEL_PATH}")
     
-    # 載入模型
+    # 👇 這裡改成強制 weights_only=False
+    state_dict = torch.load(MODEL_PATH, weights_only=False)
     model = YOLO(MODEL_PATH)
     print("✅ 模型載入成功")
 except Exception as e:
     print(f"❌ 模型載入失敗: {e}")
-    # 創建一個空的模型變數，讓應用程式至少能啟動
     model = None
+
 
 @app.route("/")
 def home():
@@ -104,6 +104,7 @@ def health():
 @app.route("/test")
 def test():
     return jsonify({"message": "API 測試成功", "model_loaded": model is not None})
+
 
 
 
