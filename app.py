@@ -9,8 +9,8 @@ import warnings
 # =========================
 try:
     from torch.nn.modules.container import Sequential
-    torch.serialization.add_safe_globals([Sequential])
-    torch.serialization.add_safe_globals(["ultralytics.nn.tasks.DetectionModel"])
+    from ultralytics.nn.tasks import DetectionModel
+    torch.serialization.add_safe_globals([Sequential, DetectionModel])
 except Exception as e:
     print(f"⚠️ 相容性修復警告: {e}")
     warnings.filterwarnings("ignore")
@@ -28,10 +28,8 @@ try:
     if not os.path.exists(MODEL_PATH):
         raise FileNotFoundError(f"模型檔案不存在: {MODEL_PATH}")
 
-    # 強制用 weights_only=False 載入
-    _ = torch.load(MODEL_PATH, weights_only=False)
+    # 直接用 YOLO API 載入
     model = YOLO(MODEL_PATH)
-
     print("✅ 模型載入成功")
 except Exception as e:
     print(f"❌ 模型載入失敗: {e}")
@@ -96,5 +94,8 @@ def health():
 @app.route("/test")
 def test():
     return jsonify({"message": "API 測試成功", "model_loaded": model is not None})
+
+
+
 
 
