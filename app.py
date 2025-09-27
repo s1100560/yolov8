@@ -1,73 +1,67 @@
 import os
 from flask import Flask, request, jsonify
 from ultralytics import YOLO
+from PIL import Image
+import io
 
-# -------------------------------
-# 初始化 Flask
-# -------------------------------
+# 建立 Flask app
 app = Flask(__name__)
 
-# -------------------------------
-# 模型載入
-# -------------------------------
-MODEL_PATH = os.getenv("MODEL_PATH", os.path.join(os.path.dirname(__file__), "freshness_fruit_and_vegetables.pt"))
-
-print(f"🔍 嘗試載入模型: {MODEL_PATH}")
-
-model = None
+# 載入 YOLOv8 模型
+MODEL_PATH = "freshness_fruit_and_vegetables.pt"
+print(f"🔄 載入模型從: {MODEL_PATH}")
 try:
-    if not os.path.exists(MODEL_PATH):
-        raise FileNotFoundError(f"模型檔案不存在: {MODEL_PATH}")
-    
-    # ✅ 方案一：直接用 YOLO 載入，不使用 torch.load
-    model = YOLO(MODEL_PATH)
+    model = YOLO(MODEL_PATH)  # ✅ 官方 API，自動處理
     print("✅ 模型載入成功")
 except Exception as e:
     print(f"❌ 模型載入失敗: {e}")
+    model = None
 
-# -------------------------------
-# 首頁
-# -------------------------------
+
 @app.route("/", methods=["GET"])
 def home():
-    return "🚀 YOLOv8 Flask API 已啟動", 200
+    return jsonify({"message": "🚀 YOLOv8 Flask API 運行中！"})
 
-# -------------------------------
-# 推論 API
-# -------------------------------
+
 @app.route("/predict", methods=["POST"])
 def predict():
     if model is None:
-        return jsonify({"error": "模型尚未載入"}), 500
+        return jsonify({"error": "模型尚未成功載入"}), 500
 
     if "file" not in request.files:
-        return jsonify({"error": "請上傳圖片檔案"}), 400
+        return jsonify({"error": "請上傳圖片 (form-data key = file)"}), 400
 
     file = request.files["file"]
-    img_path = os.path.join("/tmp", file.filename)
-    file.save(img_path)
 
     try:
-        results = model.predict(img_path)
-        detections = []
+        # 讀取圖片
+        img = Image.open(io.BytesIO(file.read()))
+
+        # 推論
+        results = model.predict(img)
+
+        # 把 YOLO 輸出整理成 JSON
+        predictions = []
         for r in results:
             for box in r.boxes:
-                detections.append({
-                    "class": model.names[int(box.cls)],
-                    "confidence": float(box.conf),
-                    "bbox": box.xyxy.tolist()
+                cls_id = int(box.cls[0].item())
+                conf = float(box.conf[0].item())
+                label = model.names[cls_id] if model.names else str(cls_id)
+                predictions.append({
+                    "class": label,
+                    "confidence": round(conf, 3),
+                    "box": box.xyxy[0].tolist()  # [x1, y1, x2, y2]
                 })
-        return jsonify({"detections": detections})
+
+        return jsonify({"predictions": predictions})
+
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# -------------------------------
-# 主程式入口
-# -------------------------------
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 10000))  # Render 預設會給 PORT 環境變數
-    app.run(host="0.0.0.0", port=port)
 
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 10000))  # Render 預設使用 10000
+    app.run(host="0.0.0.0", port=port)
 
 
 
