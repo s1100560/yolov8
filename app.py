@@ -1,26 +1,46 @@
+import torch
 from flask import Flask, request, jsonify
 from ultralytics import YOLO
 import os
 
+# 修復 PyTorch 相容性問題
+try:
+    torch.serialization.add_safe_globals([
+        "ultralytics.nn.tasks.DetectionModel",
+        "torch.nn.modules.container.Sequential"
+    ])
+except:
+    pass
+
 app = Flask(__name__)
 
-# 模型檔案名稱（放在 repo 根目錄，並且有 commit 到 GitHub）
+# 模型檔案名稱
 MODEL_PATH = "freshness_fruit_and_vegetables.pt"
 
 # 檢查檔案是否存在
 if not os.path.exists(MODEL_PATH):
     raise FileNotFoundError(f"❌ 找不到模型檔案: {MODEL_PATH}")
 
+print(f"✅ 找到模型檔案: {MODEL_PATH}")
+
 # 載入模型
 try:
-    model = YOLO(MODEL_PATH)  # 不需要 weights_only
+    model = YOLO(MODEL_PATH)
     print("✅ 模型載入成功")
 except Exception as e:
     print(f"❌ 模型載入失敗: {e}")
-    model = None
+    # 嘗試使用預訓練模型作為備份
+    try:
+        model = YOLO('yolov8n.pt')
+        print("✅ 使用預訓練模型載入成功")
+    except:
+        model = None
+        print("❌ 所有模型載入都失敗")
 
 @app.route("/", methods=["GET"])
 def home():
+    if model is None:
+        return "❌ 模型載入失敗，請檢查日誌", 500
     return "🚀 YOLOv8 Flask API is running!"
 
 @app.route("/predict", methods=["POST"])
@@ -32,31 +52,38 @@ def predict():
         return jsonify({"error": "請上傳圖片檔案"}), 400
 
     file = request.files["file"]
+    if file.filename == "":
+        return jsonify({"error": "沒有選擇檔案"}), 400
 
-    # 暫存圖片
-    filepath = os.path.join("uploads", file.filename)
-    os.makedirs("uploads", exist_ok=True)
-    file.save(filepath)
-
-    # 模型推論
     try:
+        # 暫存圖片
+        filepath = "temp_image.jpg"
+        file.save(filepath)
+
+        # 模型推論
         results = model(filepath)
         detections = []
-        for r in results:
-            boxes = r.boxes
-            for box in boxes:
+        
+        if results and len(results) > 0:
+            for box in results[0].boxes:
                 detections.append({
                     "class": model.names[int(box.cls)],
                     "confidence": float(box.conf),
                     "bbox": box.xyxy[0].tolist()
                 })
 
+        # 清理暫存檔
+        if os.path.exists(filepath):
+            os.remove(filepath)
+
         return jsonify({"detections": detections})
+        
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        # 清理暫存檔
+        if os.path.exists("temp_image.jpg"):
+            os.remove("temp_image.jpg")
+        return jsonify({"error": f"預測失敗: {str(e)}"}), 500
 
-
-if __name__ == "__main__":
-    # 本地測試時用，Render 會自動用 gunicorn
-    app.run(host="0.0.0.0", port=5000)
-
+@app.route("/health", methods=["GET"])
+def health_check():
+    return jsonify({"status": "healthy", "model_loaded": model is not None})
