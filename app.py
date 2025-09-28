@@ -3,14 +3,20 @@ from flask import Flask, request, jsonify
 from ultralytics import YOLO
 import os
 
-# 修復 PyTorch 相容性問題
+# 修正的 PyTorch 相容性修復
 try:
+    # 正確的導入方式
+    from ultralytics.nn.tasks import DetectionModel
+    from torch.nn.modules.container import Sequential
+    
+    # 使用類別而不是字串
     torch.serialization.add_safe_globals([
-        "ultralytics.nn.tasks.DetectionModel",
-        "torch.nn.modules.container.Sequential"
+        DetectionModel,
+        Sequential
     ])
-except:
-    pass
+    print("✅ 相容性修復完成")
+except Exception as e:
+    print(f"⚠️ 相容性修復警告: {e}")
 
 app = Flask(__name__)
 
@@ -23,25 +29,26 @@ if not os.path.exists(MODEL_PATH):
 
 print(f"✅ 找到模型檔案: {MODEL_PATH}")
 
-# 載入模型
+# 載入模型 - 簡化版本
 try:
+    # 方法1：直接載入
     model = YOLO(MODEL_PATH)
     print("✅ 模型載入成功")
 except Exception as e:
     print(f"❌ 模型載入失敗: {e}")
-    # 嘗試使用預訓練模型作為備份
     try:
+        # 方法2：使用預訓練模型
         model = YOLO('yolov8n.pt')
         print("✅ 使用預訓練模型載入成功")
-    except:
+    except Exception as e2:
         model = None
-        print("❌ 所有模型載入都失敗")
+        print(f"❌ 所有模型載入都失敗: {e2}")
 
 @app.route("/", methods=["GET"])
 def home():
     if model is None:
         return "❌ 模型載入失敗，請檢查日誌", 500
-    return "🚀 YOLOv8 Flask API is running!"
+    return "🚀 YOLOv8 Flask API is running on Render!"
 
 @app.route("/predict", methods=["POST"])
 def predict():
@@ -64,7 +71,7 @@ def predict():
         results = model(filepath)
         detections = []
         
-        if results and len(results) > 0:
+        if results and len(results) > 0 and hasattr(results[0], 'boxes'):
             for box in results[0].boxes:
                 detections.append({
                     "class": model.names[int(box.cls)],
@@ -87,3 +94,10 @@ def predict():
 @app.route("/health", methods=["GET"])
 def health_check():
     return jsonify({"status": "healthy", "model_loaded": model is not None})
+
+@app.route("/test", methods=["GET"])
+def test():
+    """測試端點"""
+    if model is None:
+        return jsonify({"status": "error", "message": "模型未載入"})
+    return jsonify({"status": "success", "message": "API 正常運作"})
