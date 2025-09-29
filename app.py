@@ -1,21 +1,10 @@
-from flask import Flask, jsonify
+from flask import Flask
 
 app = Flask(__name__)
 
-# 添加這一行
-model_loaded = False
-
 @app.route("/")
 def home():
-    return {"message": "YOLOv8 API 運行中", "status": "ready"}
-
-@app.route("/test")
-def test():
-    return {"message": "API 測試成功", "status": "success"}
-
-@app.route("/health")
-def health():
-    return {"status": "healthy"}, 200
+    return "OK"
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=10000, debug=False)
+    app.run(host="0.0.0.0", port=10000)
