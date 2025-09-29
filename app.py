@@ -2,6 +2,9 @@ from flask import Flask, jsonify
 
 app = Flask(__name__)
 
+# 添加這一行
+model_loaded = False
+
 @app.route("/")
 def home():
     return {"message": "YOLOv8 API 運行中", "status": "ready"}
