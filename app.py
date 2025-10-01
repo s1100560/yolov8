@@ -14,6 +14,11 @@ app = Flask(__name__)
 def home():
     return jsonify({"message": "ONNX YOLO API 正常運行", "status": "success"})
 
+@app.route("/health")
+def health_check():
+    """健康檢查端點"""
+    return jsonify({"status": "healthy"}), 200
+
 @app.route("/predict", methods=["POST"])
 def predict():
     try:
@@ -48,4 +53,4 @@ def predict():
         return jsonify({"error": str(e)}), 500
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=10000, debug=False)
+    app.run(host="0.0.0.0", port=8000, debug=False)  # 改為 8000
