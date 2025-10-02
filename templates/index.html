@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>生鮮蔬果檢測系統</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #2c3e50;
+            text-align: center;
+        }
+        .upload-area {
+            border: 2px dashed #3498db;
+            border-radius: 10px;
+            padding: 40px;
+            text-align: center;
+            margin: 20px 0;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        .upload-area:hover {
+            background-color: #ecf0f1;
+        }
+        .upload-area.dragover {
+            background-color: #d4edda;
+            border-color: #28a745;
+        }
+        #fileInput {
+            display: none;
+        }
+        .btn {
+            background-color: #3498db;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        .btn:hover {
+            background-color: #2980b9;
+        }
+        .btn:disabled {
+            background-color: #bdc3c7;
+            cursor: not-allowed;
+        }
+        .result-area {
+            margin-top: 30px;
+            display: none;
+        }
+        .image-container {
+            text-align: center;
+            margin: 20px 0;
+        }
+        .image-container img {
+            max-width: 100%;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .detections {
+            background-color: #f8f9fa;
+            padding: 20px;
+            border-radius: 10px;
+            margin-top: 20px;
+        }
+        .detection-item {
+            background: white;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 5px;
+            border-left: 4px solid #3498db;
+        }
+        .fresh-item {
+            border-left-color: #28a745;
+        }
+        .rotten-item {
+            border-left-color: #dc3545;
+        }
+        .loading {
+            text-align: center;
+            color: #3498db;
+            display: none;
+        }
+        .success {
+            color: #28a745;
+        }
+        .error {
+            color: #dc3545;
+        }
+        .stats {
+            display: flex;
+            justify-content: space-around;
+            margin: 20px 0;
+        }
+        .stat-item {
+            text-align: center;
+            padding: 15px;
+            border-radius: 10px;
+            flex: 1;
+            margin: 0 10px;
+        }
+        .fresh-stat {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        .rotten-stat {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+        .total-stat {
+            background-color: #d1ecf1;
+            color: #0c5460;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🥦 生鮮蔬果檢測系統 🍎</h1>
+        
+        <div class="upload-area" id="uploadArea">
+            <p>📁 點擊或拖曳圖片到此區域上傳</p>
+            <p style="color: #666; font-size: 14px;">支援 JPG、PNG 格式</p>
+            <input type="file" id="fileInput" accept="image/*">
+        </div>
+
+        <div style="text-align: center;">
+            <button class="btn" id="predictBtn" disabled>開始檢測</button>
+        </div>
+
+        <div class="loading" id="loading">
+            <p>🔍 AI 正在分析圖片中...</p>
+        </div>
+
+        <div class="result-area" id="resultArea">
+            <h2>檢測結果</h2>
+            
+            <div class="stats" id="statsArea" style="display: none;">
+                <div class="stat-item fresh-stat">
+                    <h3>🥦 新鮮</h3>
+                    <p id="freshCount">0</p>
+                </div>
+                <div class="stat-item total-stat">
+                    <h3>📊 總數</h3>
+                    <p id="totalCount">0</p>
+                </div>
+                <div class="stat-item rotten-stat">
+                    <h3>🚫 腐爛</h3>
+                    <p id="rottenCount">0</p>
+                </div>
+            </div>
+
+            <div class="image-container">
+                <img id="resultImage" src="" alt="檢測結果">
+            </div>
+            <div class="detections" id="detectionsList">
+                <!-- 檢測結果會顯示在這裡 -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('fileInput');
+        const predictBtn = document.getElementById('predictBtn');
+        const loading = document.getElementById('loading');
+        const resultArea = document.getElementById('resultArea');
+        const resultImage = document.getElementById('resultImage');
+        const detectionsList = document.getElementById('detectionsList');
+        const statsArea = document.getElementById('statsArea');
+        const freshCount = document.getElementById('freshCount');
+        const rottenCount = document.getElementById('rottenCount');
+        const totalCount = document.getElementById('totalCount');
+
+        let selectedFile = null;
+
+        // 點擊上傳區域
+        uploadArea.addEventListener('click', () => {
+            fileInput.click();
+        });
+
+        // 檔案選擇
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                handleFileSelect(e.target.files[0]);
+            }
+        });
+
+        // 拖曳功能
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('dragover');
+        });
+
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            if (e.dataTransfer.files.length > 0) {
+                handleFileSelect(e.dataTransfer.files[0]);
+            }
+        });
+
+        function handleFileSelect(file) {
+            if (!file.type.match('image.*')) {
+                alert('請上傳圖片檔案！');
+                return;
+            }
+
+            selectedFile = file;
+            predictBtn.disabled = false;
+            
+            // 顯示預覽
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                uploadArea.innerHTML = `<img src="${e.target.result}" style="max-width: 200px; border-radius: 5px;"><p>已選擇: ${file.name}</p>`;
+            };
+            reader.readAsDataURL(file);
+        }
+
+        // 預測按鈕
+        predictBtn.addEventListener('click', async () => {
+            if (!selectedFile) return;
+
+            loading.style.display = 'block';
+            resultArea.style.display = 'none';
+            statsArea.style.display = 'none';
+            predictBtn.disabled = true;
+
+            const formData = new FormData();
+            formData.append('file', selectedFile);
+
+            try {
+                const response = await fetch('/predict', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const result = await response.json();
+
+                if (result.status === 'success') {
+                    // 顯示統計數據
+                    freshCount.textContent = result.fresh_count;
+                    rottenCount.textContent = result.rotten_count;
+                    totalCount.textContent = result.detection_count;
+                    statsArea.style.display = 'flex';
+                    
+                    // 顯示結果圖片
+                    resultImage.src = result.image_with_boxes;
+                    
+                    // 顯示檢測結果
+                    detectionsList.innerHTML = `
+                        <h3>檢測到 ${result.detection_count} 個物件：</h3>
+                        ${result.detections.map(det => `
+                            <div class="detection-item ${det.status === 'fresh' ? 'fresh-item' : 'rotten-item'}">
+                                <strong>${det.class_name}</strong> - 信心度: ${det.confidence}<br>
+                                位置: [${det.bbox.join(', ')}]<br>
+                                <span style="color: ${det.status === 'fresh' ? '#28a745' : '#dc3545'};">
+                                    ${det.status === 'fresh' ? '✅ 新鮮' : '❌ 腐爛'}
+                                </span>
+                            </div>
+                        `).join('')}
+                    `;
+                    
+                    resultArea.style.display = 'block';
+                } else {
+                    alert('檢測失敗: ' + (result.error || '未知錯誤'));
+                }
+            } catch (error) {
+                alert('上傳失敗: ' + error.message);
+            } finally {
+                loading.style.display = 'none';
+                predictBtn.disabled = false;
+            }
+        });
+    </script>
+</body>
+</html>
