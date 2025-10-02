@@ -4,8 +4,6 @@ import numpy as np
 from flask import Flask, jsonify, request, render_template
 from PIL import Image
 import io
-import torch
-from ultralytics.utils import ops
 import base64
 
 # 加載 ONNX 模型
@@ -20,6 +18,32 @@ CLASS_NAMES = [
     "rotten carrot", "rotten cucumber", "rotten mango", "rotten orange", "rotten potato",
     "rotten tomato", "rotten bell pepper"
 ]
+
+def non_max_suppression_numpy(predictions, conf_thres=0.25, iou_thres=0.45):
+    """使用 NumPy 實現簡單的非極大值抑制"""
+    # 這裡實現簡單的 NMS，或者直接回傳所有信心度高的預測
+    detections = []
+    
+    # 遍歷所有預測
+    for i in range(predictions.shape[2]):
+        detection = predictions[0, :, i]  # [x1, y1, x2, y2, conf, class...]
+        confidence = detection[4]
+        
+        # 只保留信心度高的預測
+        if confidence > conf_thres:
+            # 找到類別
+            class_scores = detection[5:]
+            class_id = np.argmax(class_scores)
+            class_confidence = class_scores[class_id]
+            
+            # 總信心度 = 物件信心度 × 類別信心度
+            total_confidence = confidence * class_confidence
+            
+            if total_confidence > conf_thres:
+                x1, y1, x2, y2 = detection[0], detection[1], detection[2], detection[3]
+                detections.append([x1, y1, x2, y2, total_confidence, class_id])
+    
+    return [np.array(detections)] if detections else [None]
 
 @app.route("/")
 def home():
@@ -48,9 +72,6 @@ def predict():
         original_image = np.array(image)
         image_rgb = cv2.cvtColor(original_image, cv2.COLOR_RGB2BGR)
         
-        # 保存原始圖片用於顯示
-        display_image = original_image.copy()
-        
         # 預處理用於推理
         input_image = cv2.resize(image_rgb, (640, 640))
         input_image = input_image / 255.0
@@ -62,9 +83,9 @@ def predict():
         output_name = session.get_outputs()[0].name
         results = session.run([output_name], {input_name: input_image})
         
-        # 後處理
-        predictions = torch.tensor(results[0])
-        processed_results = ops.non_max_suppression(predictions, conf_thres=0.25, iou_thres=0.45)
+        # 使用 NumPy 後處理
+        predictions = results[0]
+        processed_results = non_max_suppression_numpy(predictions, conf_thres=0.25, iou_thres=0.45)
         
         # 提取檢測結果並繪製檢測框
         detections = []
@@ -73,7 +94,7 @@ def predict():
         for result in processed_results:
             if result is not None:
                 for det in result:
-                    x1, y1, x2, y2, conf, cls = det.tolist()
+                    x1, y1, x2, y2, conf, cls = det
                     
                     # 轉換座標回原始圖片尺寸
                     h, w = original_image.shape[:2]
@@ -103,7 +124,7 @@ def predict():
                     detections.append({
                         "class": int(cls),
                         "class_name": class_name,
-                        "confidence": round(conf, 2),
+                        "confidence": round(float(conf), 2),
                         "bbox": [x1, y1, x2, y2],
                         "status": "fresh" if class_name.startswith('fresh') else "rotten"
                     })
