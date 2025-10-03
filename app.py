@@ -23,10 +23,16 @@ def non_max_suppression_numpy(predictions, conf_thres=0.1, iou_thres=0.3):
     """使用 NumPy 實現簡單的非極大值抑制"""
     detections = []
     
+    print(f"開始處理 {predictions.shape[2]} 個預測...")
+    
     # 遍歷所有預測 (8400個)
     for i in range(predictions.shape[2]):
         detection = predictions[0, :, i]  # [x1, y1, x2, y2, conf, class...]
         confidence = detection[4]  # 物件信心度
+        
+        # 記錄最高信心度
+        if i == 0 or confidence > max_conf:
+            max_conf = confidence
         
         # 降低信心度要求到 0.1
         if confidence > conf_thres:
@@ -43,6 +49,8 @@ def non_max_suppression_numpy(predictions, conf_thres=0.1, iou_thres=0.3):
                 x1, y1, x2, y2 = detection[0], detection[1], detection[2], detection[3]
                 detections.append([x1, y1, x2, y2, total_confidence, class_id])
     
+    print(f"最高物件信心度: {max_conf:.4f}")
+    print(f"過濾後檢測數量: {len(detections)}")
     return [np.array(detections)] if detections else [None]
 
 @app.route("/")
@@ -66,11 +74,15 @@ def predict():
         if file.filename == '':
             return jsonify({"error": "沒有選擇檔案"}), 400
         
+        print(f"收到圖片: {file.filename}")
+        
         # 讀取和預處理影像
         image_data = file.read()
         image = Image.open(io.BytesIO(image_data))
         original_image = np.array(image)
         image_rgb = cv2.cvtColor(original_image, cv2.COLOR_RGB2BGR)
+        
+        print(f"圖片尺寸: {original_image.shape}")
         
         # 預處理用於推理
         input_image = cv2.resize(image_rgb, (640, 640))
@@ -78,14 +90,19 @@ def predict():
         input_image = input_image.transpose(2, 0, 1)
         input_image = np.expand_dims(input_image, axis=0).astype(np.float32)
         
+        print(f"模型輸入形狀: {input_image.shape}")
+        
         # 推理
         input_name = session.get_inputs()[0].name
         output_name = session.get_outputs()[0].name
         results = session.run([output_name], {input_name: input_image})
         
+        print(f"模型輸出形狀: {results[0].shape}")
+        print(f"輸出範圍: [{np.min(results[0]):.4f}, {np.max(results[0]):.4f}]")
+        
         # 使用 NumPy 後處理 (信心度降到 0.1)
         predictions = results[0]
-        processed_results = non_max_suppression_numpy(predictions, conf_thres=0.1, iou_thres=0.3)
+        processed_results = non_max_suppression_numpy(predictions, conf_thres=0.01, iou_thres=0.1)  # 進一步降低
         
         # 提取檢測結果並繪製檢測框
         detections = []
@@ -135,6 +152,8 @@ def predict():
                         "status": "fresh" if class_name.startswith('fresh') else "rotten"
                     })
         
+        print(f"最終檢測數量: {len(detections)}")
+        
         # 轉換為 base64 用於網頁顯示
         _, buffer = cv2.imencode('.jpg', cv2.cvtColor(display_image_with_boxes, cv2.COLOR_RGB2BGR))
         image_base64 = base64.b64encode(buffer).decode('utf-8')
@@ -149,6 +168,7 @@ def predict():
         })
         
     except Exception as e:
+        print(f"發生錯誤: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
 if __name__ == "__main__":
