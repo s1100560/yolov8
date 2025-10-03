@@ -19,26 +19,26 @@ CLASS_NAMES = [
     "rotten tomato", "rotten bell pepper"
 ]
 
-def non_max_suppression_numpy(predictions, conf_thres=0.25, iou_thres=0.45):
+def non_max_suppression_numpy(predictions, conf_thres=0.1, iou_thres=0.3):
     """使用 NumPy 實現簡單的非極大值抑制"""
-    # 這裡實現簡單的 NMS，或者直接回傳所有信心度高的預測
     detections = []
     
-    # 遍歷所有預測
+    # 遍歷所有預測 (8400個)
     for i in range(predictions.shape[2]):
         detection = predictions[0, :, i]  # [x1, y1, x2, y2, conf, class...]
-        confidence = detection[4]
+        confidence = detection[4]  # 物件信心度
         
-        # 只保留信心度高的預測
+        # 降低信心度要求到 0.1
         if confidence > conf_thres:
-            # 找到類別
-            class_scores = detection[5:]
+            # 找到類別 (前5個是座標，後面17個是類別分數)
+            class_scores = detection[5:5+17]
             class_id = np.argmax(class_scores)
             class_confidence = class_scores[class_id]
             
             # 總信心度 = 物件信心度 × 類別信心度
             total_confidence = confidence * class_confidence
             
+            # 再次過濾
             if total_confidence > conf_thres:
                 x1, y1, x2, y2 = detection[0], detection[1], detection[2], detection[3]
                 detections.append([x1, y1, x2, y2, total_confidence, class_id])
@@ -83,9 +83,9 @@ def predict():
         output_name = session.get_outputs()[0].name
         results = session.run([output_name], {input_name: input_image})
         
-        # 使用 NumPy 後處理
+        # 使用 NumPy 後處理 (信心度降到 0.1)
         predictions = results[0]
-        processed_results = non_max_suppression_numpy(predictions, conf_thres=0.25, iou_thres=0.45)
+        processed_results = non_max_suppression_numpy(predictions, conf_thres=0.1, iou_thres=0.3)
         
         # 提取檢測結果並繪製檢測框
         detections = []
@@ -102,6 +102,12 @@ def predict():
                     y1 = int(y1 * h / 640)
                     x2 = int(x2 * w / 640)
                     y2 = int(y2 * h / 640)
+                    
+                    # 確保座標在圖片範圍內
+                    x1 = max(0, min(x1, w))
+                    y1 = max(0, min(y1, h))
+                    x2 = max(0, min(x2, w))
+                    y2 = max(0, min(y2, h))
                     
                     # 根據新鮮/腐爛選擇顏色
                     class_name = CLASS_NAMES[int(cls)]
