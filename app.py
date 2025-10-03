@@ -19,11 +19,12 @@ CLASS_NAMES = [
     "rotten tomato", "rotten bell pepper"
 ]
 
-def non_max_suppression_numpy(predictions, conf_thres=0.1, iou_thres=0.3):
+def non_max_suppression_numpy(predictions, conf_thres=0.005, iou_thres=0.05):
     """使用 NumPy 實現簡單的非極大值抑制"""
     detections = []
     
     print(f"開始處理 {predictions.shape[2]} 個預測...")
+    max_conf = 0
     
     # 遍歷所有預測 (8400個)
     for i in range(predictions.shape[2]):
@@ -31,10 +32,10 @@ def non_max_suppression_numpy(predictions, conf_thres=0.1, iou_thres=0.3):
         confidence = detection[4]  # 物件信心度
         
         # 記錄最高信心度
-        if i == 0 or confidence > max_conf:
+        if confidence > max_conf:
             max_conf = confidence
         
-        # 降低信心度要求到 0.1
+        # 大幅降低信心度要求到 0.005
         if confidence > conf_thres:
             # 找到類別 (前5個是座標，後面17個是類別分數)
             class_scores = detection[5:5+17]
@@ -44,7 +45,7 @@ def non_max_suppression_numpy(predictions, conf_thres=0.1, iou_thres=0.3):
             # 總信心度 = 物件信心度 × 類別信心度
             total_confidence = confidence * class_confidence
             
-            # 再次過濾
+            # 再次過濾（同樣使用很低的閾值）
             if total_confidence > conf_thres:
                 x1, y1, x2, y2 = detection[0], detection[1], detection[2], detection[3]
                 detections.append([x1, y1, x2, y2, total_confidence, class_id])
@@ -100,9 +101,9 @@ def predict():
         print(f"模型輸出形狀: {results[0].shape}")
         print(f"輸出範圍: [{np.min(results[0]):.4f}, {np.max(results[0]):.4f}]")
         
-        # 使用 NumPy 後處理 (信心度降到 0.1)
+        # 使用 NumPy 後處理 (信心度大幅降到 0.005)
         predictions = results[0]
-        processed_results = non_max_suppression_numpy(predictions, conf_thres=0.01, iou_thres=0.1)  # 進一步降低
+        processed_results = non_max_suppression_numpy(predictions, conf_thres=0.005, iou_thres=0.05)
         
         # 提取檢測結果並繪製檢測框
         detections = []
@@ -173,3 +174,4 @@ def predict():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8000, debug=False)
+
